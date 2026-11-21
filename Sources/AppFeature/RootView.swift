@@ -1,5 +1,6 @@
 import Core
 import SwiftUI
+import Transactions
 
 public struct RootView: View {
     let dependencies: AppDependencies
@@ -10,11 +11,8 @@ public struct RootView: View {
 
     public var body: some View {
         NavigationStack {
-            EmptyStateView("Add your first feature in Sources/", systemImage: "hammer")
-                .navigationTitle("Machine Round")
+            TransactionsView(model: TransactionsViewModel(api: FakeTransactionAPI(all: FakeTransactionAPI.sample(count: 200))))
         }
         .tint(Theme.accent)
     }
 }
-
-#Preview { RootView(dependencies: AppDependencies(api: APIClient(baseURL: Endpoints.jsonPlaceholder), store: InMemoryStore())) }

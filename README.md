@@ -1,30 +1,30 @@
-# Machine Round iOS: `01-minimal`
+# Fintech: transaction history (Swift)
 
-Core infrastructure with no features. Start a round from here when you can bring a skeleton.
+Built from `01-minimal`. A **domain problem**: the core list screen of every payments/banking app (and lesson 11 of your Flutter prep). Aim for 60–90 minutes.
 
+## What is built
+- `List` with `Section`s per **local** day ("Today", "Yesterday", "3 Nov", "31 Dec 2025") and a per-day net of successful transactions.
+- Segmented Received / Paid filter, status menu (Pending / Failed), `.searchable` with a debounced server query.
+- Cursor pagination with footer spinner / Retry, pull-to-refresh, signed INR amounts (`+₹1,250.00`), failed amounts struck through, one VoiceOver label per row.
+
+## How the concurrency works
 ```
-Package.swift                      Core, AppFeature targets; Swift 6 language mode (strict concurrency)
-Sources/Core/
-  Networking/AppError.swift        one error enum + userMessage + map(URLError/Decoding/Cancellation) + fromStatus
-  Networking/APIClient.swift       HTTPClient protocol (URLSession conforms), typed get/send with typed throws
-  State/Loadable.swift             idle / loading(previous) / loaded / failed(error, previous)
-  Storage/KeyValueStore.swift      protocol + UserDefaultsStore + thread-safe InMemoryStore, JSON helpers
-  UI/StateViews.swift              LoadingView, ErrorView(retry), EmptyStateView, LoadMoreFooter
-Sources/AppFeature/
-  AppDependencies.swift            composition root (live() for the app, fakes for tests/previews)
-  RootView.swift                   NavigationStack shell
-App/MachineRound.xcodeproj         iOS app target that shows RootView
+.task(id: model.searchText) { debounceSearch() }   cancellable sleep → query
+.task(id: model.filter)     { reload() }            filter = kind + status + query
+                                                     a change cancels the old load; checkCancellation drops its result
+footer .task { loadMore() }                          guarded; ignored if the filter changed meanwhile
 ```
 
-## Why these choices (be ready to defend them)
-- **One state enum (`Loadable`)**, not `isLoading`/`error`/`items` booleans that can contradict each other. `previous` keeps data on screen while reloading.
-- **`HTTPClient` protocol:** `URLSession` conforms, tests pass a closure stub. No `URLProtocol` registration needed.
-- **Typed throws (`throws(AppError)`)** on the client: callers switch exhaustively; views never see `URLError`.
-- **Cancellation is not an error:** `AppError.cancelled` / `isCancellation` lets view models ignore it (user left or typed again).
-- **Swift 6 strict concurrency on:** `Sendable` everywhere it matters; ignoring concurrency warnings in a live round is a red flag in 2026.
-- **Composition root:** one place builds concrete types; features depend on protocols.
+## Points to make in the round
+| Topic | Answer |
+|---|---|
+| Cursor vs page number | New transactions arrive at the top; offsets then repeat/skip rows. Dedupe by id anyway. |
+| Timezones | Server sends UTC; group with `Calendar.current.startOfDay` (tests pin Asia/Kolkata). |
+| Money | `Int64` minor units → `Decimal` → `.currency(code: "INR").locale(en_IN)` for lakh grouping. |
+| Derived data | `sections` is computed per body evaluation: fine for hundreds of rows; cache it on `items` changes for thousands. |
+| Real time | Push/WebSocket inserts at the top with dedupe; keep scroll position. |
+| Offline | Cache page 1 (SwiftData/SQLite/file) for an instant start with "Updated …". |
+| Privacy | Mask account numbers/VPAs; honour "hide balances"; blur the app-switcher snapshot. |
 
-## Tests (Swift Testing)
-Decoding + query building, status mapping (parameterised 401/404/500), bad JSON → `.decoding`, transport error mapping, corrupt storage treated as missing.
-
-Next: `git checkout 02-posts-list`.
+## Tests (12)
+Grouping (3): day titles in order, net of successes only, signed INR. View model (4): cursor pages to the end, filter change cancels the old load, debounced search becomes the server query, first-page error + retry. Plus core (5).
