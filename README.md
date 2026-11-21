@@ -1,30 +1,24 @@
-# Machine Round iOS: `01-minimal`
+# Swiggy: weather list with favourites synced across screens
 
-Core infrastructure with no features. Start a round from here when you can bring a skeleton.
+Built from `01-minimal`. Source: a Swiggy iOS interview ([Medium](https://medium.com/@pranav_ps/swiggy-ios-interview-experience-ad1018f12353), about 2023, search summary only). Round 1 was a **1.5-hour machine coding** task: a weather app with a **sorted city list** and a **favourite button that stays in sync across two screens**. The candidate took 70 minutes and did not finish the favourite logic. Follow-ups: why `self` in the closure, and `weak` vs `unowned`. API: [Open-Meteo](https://open-meteo.com) (free, no key).
 
-```
-Package.swift                      Core, AppFeature targets; Swift 6 language mode (strict concurrency)
-Sources/Core/
-  Networking/AppError.swift        one error enum + userMessage + map(URLError/Decoding/Cancellation) + fromStatus
-  Networking/APIClient.swift       HTTPClient protocol (URLSession conforms), typed get/send with typed throws
-  State/Loadable.swift             idle / loading(previous) / loaded / failed(error, previous)
-  Storage/KeyValueStore.swift      protocol + UserDefaultsStore + thread-safe InMemoryStore, JSON helpers
-  UI/StateViews.swift              LoadingView, ErrorView(retry), EmptyStateView, LoadMoreFooter
-Sources/AppFeature/
-  AppDependencies.swift            composition root (live() for the app, fakes for tests/previews)
-  RootView.swift                   NavigationStack shell
-App/MachineRound.xcodeproj         iOS app target that shows RootView
-```
+## What is built
+- Cities tab: 10 Indian cities, current temperature and condition, sort by name / warmest / coldest, pull-to-refresh.
+- Favourites tab (with a badge count) and a detail screen; the ☆ works from all three and is persisted.
+- **One request for all cities** (Open-Meteo takes comma-separated coordinates; one location returns an object, several return an array, both handled).
 
-## Why these choices (be ready to defend them)
-- **One state enum (`Loadable`)**, not `isLoading`/`error`/`items` booleans that can contradict each other. `previous` keeps data on screen while reloading.
-- **`HTTPClient` protocol:** `URLSession` conforms, tests pass a closure stub. No `URLProtocol` registration needed.
-- **Typed throws (`throws(AppError)`)** on the client: callers switch exhaustively; views never see `URLError`.
-- **Cancellation is not an error:** `AppError.cancelled` / `isCancellation` lets view models ignore it (user left or typed again).
-- **Swift 6 strict concurrency on:** `Sendable` everywhere it matters; ignoring concurrency warnings in a live round is a red flag in 2026.
-- **Composition root:** one place builds concrete types; features depend on protocols.
+## The point of the task: one source of truth
+`WeatherStore` (`@MainActor @Observable`) is created once and injected with `.environment(store)`. The list, the favourites tab and the detail screen all **read** `favouriteIds` from it and call `toggleFavourite`; nobody keeps a copy. That is why the button can't get out of sync. The usual bug is each screen holding its own array of favourites (or a value-type copy of the city) and forgetting to propagate the change back.
 
-## Tests (Swift Testing)
-Decoding + query building, status mapping (parameterised 401/404/500), bad JSON → `.decoding`, transport error mapping, corrupt storage treated as missing.
+## Follow-up: `self` in closures, `weak` vs `unowned`
+`ClosureCaptureExample.swift` and its test:
+- A class that **stores** a closure capturing `self` strongly forms a cycle (controller → scheduler → closure → controller) and is never freed (tested: still alive after scope).
+- `[weak self]`: the closure doesn't own the controller; `self?` becomes nil safely (tested: freed).
+- `[unowned self]`: no optional, but crashes if the closure outlives `self`; only when lifetimes are guaranteed (for example, a child that cannot outlive its parent).
+- SwiftUI `.task {}` and non-escaping closures (`map`, `forEach`) don't need `weak`; a stored `Task { }` that loops forever does (or cancel it in `deinit`).
 
-Next: `git checkout 02-posts-list`.
+## Tests (11)
+Store (3): sorting by name/warm/cold, favourite visible everywhere + persisted, failure then retry. Service (2): array and single-object responses. Closures (1): strong capture leaks, weak capture doesn't. Plus core (5).
+
+## Extend it (likely follow-ups)
+Search cities (`.searchable`), hourly forecast on the detail screen, offline cache of the last response with "Updated 10 min ago", unit toggle °C/°F stored in `@AppStorage`.

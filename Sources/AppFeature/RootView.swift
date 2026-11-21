@@ -1,5 +1,6 @@
 import Core
 import SwiftUI
+import Weather
 
 public struct RootView: View {
     let dependencies: AppDependencies
@@ -9,12 +10,7 @@ public struct RootView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            EmptyStateView("Add your first feature in Sources/", systemImage: "hammer")
-                .navigationTitle("Machine Round")
-        }
-        .tint(Theme.accent)
+        WeatherRootView(store: WeatherStore(service: OpenMeteoService(), store: dependencies.store))
+            .tint(Theme.accent)
     }
 }
-
-#Preview { RootView(dependencies: AppDependencies(api: APIClient(baseURL: Endpoints.jsonPlaceholder), store: InMemoryStore())) }
