@@ -6,6 +6,9 @@ public protocol PostRepository: Sendable {
     func cachedPosts() -> [Post]
     /// Fetches page 1 and replaces the cache.
     func refresh() async throws(AppError) -> [Post]
+    /// Cache first; network fallback for posts that were never cached (deep link, search).
+    func post(id: Int) async throws(AppError) -> Post
+    func comments(postId: Int) async throws(AppError) -> [Comment]
 }
 
 public struct LivePostRepository: PostRepository {
@@ -28,5 +31,14 @@ public struct LivePostRepository: PostRepository {
         let posts: [Post] = try await api.get("posts", query: ["_page": "1", "_limit": "\(Self.pageSize)"])
         store.setValue(posts, forKey: Self.cacheKey)
         return posts
+    }
+
+    public func post(id: Int) async throws(AppError) -> Post {
+        if let cached = cachedPosts().first(where: { $0.id == id }) { return cached }
+        return try await api.get("posts/\(id)")
+    }
+
+    public func comments(postId: Int) async throws(AppError) -> [Comment] {
+        try await api.get("posts/\(postId)/comments")
     }
 }

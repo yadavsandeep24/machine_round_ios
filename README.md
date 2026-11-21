@@ -1,4 +1,18 @@
-# Machine Round iOS: `02-posts-list`
+# Machine Round iOS: `feature/post-detail`
+
+> Diff against the previous step: `git diff 02-posts-list..feature/post-detail`
+
+## This step: detail screen
+- **Value-based navigation:** `NavigationLink(value: post.id)` + `.navigationDestination(for: Int.self)`; the destination is built lazily and deep links only need the id.
+- **`async let`** loads the post and its comments in parallel; both are cancelled together when the view disappears (structured concurrency). A comments failure shows inline and does not fail the screen.
+- **`.task(id:)`** restarts the load (cancelling the old one) if the id changes.
+- **Cache first, network fallback** in `LivePostRepository.post(id:)` for posts that were never cached.
+- **Cancellation:** a cancelled load leaves the state untouched instead of showing an error (tested).
+- Tests: 5 more for the detail view model. 15 total.
+
+---
+
+## Earlier step: `02-posts-list`
 
 A basic feature on top of `01-minimal`: fetch posts from `jsonplaceholder.typicode.com`, cache them (offline-first), and show loading, error with Retry, empty and success states with pull-to-refresh.
 

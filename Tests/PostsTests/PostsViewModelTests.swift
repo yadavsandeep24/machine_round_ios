@@ -20,7 +20,7 @@ import Testing
     }
 
     @Test func cachedDataSurvivesNetworkErrorWithBanner() async {
-        let repo = FakePostRepository(cached: [post(99)])
+        let repo = FakePostRepository(cached: [makePost(99)])
         repo.failWith = .timeout
         let model = PostsViewModel(repository: repo)
         await model.load()

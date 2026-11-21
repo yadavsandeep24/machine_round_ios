@@ -11,7 +11,7 @@ public final class PostsViewModel {
     /// Shown as a banner when cached posts are on screen.
     public private(set) var bannerError: AppError?
 
-    private let repository: any PostRepository
+    let repository: any PostRepository
 
     public init(repository: any PostRepository) {
         self.repository = repository

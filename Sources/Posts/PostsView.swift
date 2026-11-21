@@ -12,6 +12,9 @@ public struct PostsView: View {
         content
             .navigationTitle("Posts")
             .task { await model.load() }
+            .navigationDestination(for: Int.self) { id in
+                PostDetailView(model: PostDetailViewModel(postId: id, repository: model.repository))
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -28,7 +31,10 @@ public struct PostsView: View {
                         .foregroundStyle(.red)
                         .listRowBackground(Color.red.opacity(0.08))
                 }
-                ForEach(posts) { PostRow(post: $0) }
+                ForEach(posts) { post in
+                    // Value-based navigation: the destination is built lazily from the id.
+                    NavigationLink(value: post.id) { PostRow(post: post) }
+                }
             }
             .listStyle(.plain)
             .overlay {

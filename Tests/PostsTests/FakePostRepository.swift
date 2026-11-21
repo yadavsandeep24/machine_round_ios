@@ -2,7 +2,7 @@ import Core
 import Foundation
 @testable import Posts
 
-func post(_ id: Int, _ title: String? = nil) -> Post {
+func makePost(_ id: Int, _ title: String? = nil) -> Post {
     Post(id: id, userId: 1, title: title ?? "Post \(id)", body: "Body \(id)")
 }
 
@@ -10,7 +10,7 @@ func post(_ id: Int, _ title: String? = nil) -> Post {
 final class FakePostRepository: PostRepository, @unchecked Sendable {
     private let lock = NSLock()
     private var _cache: [Post]
-    var remote: [Post] = (1...45).map { post($0) }
+    var remote: [Post] = (1...45).map { makePost($0) }
     var failWith: AppError?
     private(set) var refreshCalls = 0
     /// Lets a test hold a request in flight.
@@ -27,5 +27,22 @@ final class FakePostRepository: PostRepository, @unchecked Sendable {
         let first = Array(remote.prefix(20))
         lock.withLock { _cache = first }
         return first
+    }
+
+    var remoteById: [Int: Post] = [:]
+    var commentsFailWith: AppError?
+    var commentsDelay: Duration = .zero
+
+    func post(id: Int) async throws(AppError) -> Post {
+        if let cached = cachedPosts().first(where: { $0.id == id }) { return cached }
+        guard let remote = remoteById[id] else { throw .notFound }
+        return remote
+    }
+
+    func comments(postId: Int) async throws(AppError) -> [Comment] {
+        if commentsDelay > .zero { try? await Task.sleep(for: commentsDelay) }
+        if Task.isCancelled { throw .cancelled }
+        if let commentsFailWith { throw commentsFailWith }
+        return [Comment(id: postId * 10, name: "Commenter", email: "a@b.c", body: "Nice post")]
     }
 }
