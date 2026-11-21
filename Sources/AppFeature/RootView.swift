@@ -1,4 +1,5 @@
 import Core
+import Posts
 import SwiftUI
 
 public struct RootView: View {
@@ -10,8 +11,7 @@ public struct RootView: View {
 
     public var body: some View {
         NavigationStack {
-            EmptyStateView("Add your first feature in Sources/", systemImage: "hammer")
-                .navigationTitle("Machine Round")
+            PostsView(model: PostsViewModel(repository: dependencies.postRepository))
         }
         .tint(Theme.accent)
     }

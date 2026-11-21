@@ -1,30 +1,27 @@
-# Machine Round iOS: `01-minimal`
+# Machine Round iOS: `02-posts-list`
 
-Core infrastructure with no features. Start a round from here when you can bring a skeleton.
+A basic feature on top of `01-minimal`: fetch posts from `jsonplaceholder.typicode.com`, cache them (offline-first), and show loading, error with Retry, empty and success states with pull-to-refresh.
 
 ```
-Package.swift                      Core, AppFeature targets; Swift 6 language mode (strict concurrency)
-Sources/Core/
-  Networking/AppError.swift        one error enum + userMessage + map(URLError/Decoding/Cancellation) + fromStatus
-  Networking/APIClient.swift       HTTPClient protocol (URLSession conforms), typed get/send with typed throws
-  State/Loadable.swift             idle / loading(previous) / loaded / failed(error, previous)
-  Storage/KeyValueStore.swift      protocol + UserDefaultsStore + thread-safe InMemoryStore, JSON helpers
-  UI/StateViews.swift              LoadingView, ErrorView(retry), EmptyStateView, LoadMoreFooter
-Sources/AppFeature/
-  AppDependencies.swift            composition root (live() for the app, fakes for tests/previews)
-  RootView.swift                   NavigationStack shell
-App/MachineRound.xcodeproj         iOS app target that shows RootView
+Sources/Posts/
+  Post.swift              Codable, Identifiable, Hashable, Sendable
+  PostRepository.swift    protocol + LivePostRepository (APIClient + KeyValueStore cache)
+  PostsViewModel.swift    @MainActor @Observable; state: Loadable<[Post]>, isRefreshing, bannerError
+  PostsView.swift         switch over state; List + .refreshable; .task for loading
 ```
 
-## Why these choices (be ready to defend them)
-- **One state enum (`Loadable`)**, not `isLoading`/`error`/`items` booleans that can contradict each other. `previous` keeps data on screen while reloading.
-- **`HTTPClient` protocol:** `URLSession` conforms, tests pass a closure stub. No `URLProtocol` registration needed.
-- **Typed throws (`throws(AppError)`)** on the client: callers switch exhaustively; views never see `URLError`.
-- **Cancellation is not an error:** `AppError.cancelled` / `isCancellation` lets view models ignore it (user left or typed again).
-- **Swift 6 strict concurrency on:** `Sendable` everywhere it matters; ignoring concurrency warnings in a live round is a red flag in 2026.
-- **Composition root:** one place builds concrete types; features depend on protocols.
+## Data flow
+```
+.task ─► load(): cache → state = .loaded(cache) (instant) ─► refresh() ─► repository ─► API ─► cache written
+.refreshable ─► refresh() (guarded: one at a time)
+```
+- **Offline-first:** an error with cached data shows a banner over the list; with no cache, the full-screen error + Retry.
+- **`.task`, not `.onAppear { Task { } }`:** the task is cancelled automatically when the view disappears; the view model treats `.cancelled` as a non-error (tested).
+- **`@State` owns the `@Observable` model:** created once per view identity, survives re-renders.
+- **Duplicate refreshes dropped** (tested with a gated fake).
 
-## Tests (Swift Testing)
-Decoding + query building, status mapping (parameterised 401/404/500), bad JSON → `.decoding`, transport error mapping, corrupt storage treated as missing.
+## Tests (10)
+Core (5) + view model (5): network into empty cache, full-screen failure, cached data + banner, cancellation is not an error, refresh while refreshing dropped.
 
-Next: `git checkout 02-posts-list`.
+## Branch ladder
+`02-posts-list` → `feature/post-detail` → `feature/pagination-manual` → `feature/search-debounce` → `main`.
