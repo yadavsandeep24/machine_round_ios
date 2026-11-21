@@ -2,13 +2,19 @@ import Core
 import SwiftUI
 
 public struct RootView: View {
-    public init() {}
+    let dependencies: AppDependencies
+
+    public init(dependencies: AppDependencies = .live()) {
+        self.dependencies = dependencies
+    }
 
     public var body: some View {
-        Text("Start here")
-            .font(.title2)
-            .tint(Theme.accent)
+        NavigationStack {
+            EmptyStateView("Add your first feature in Sources/", systemImage: "hammer")
+                .navigationTitle("Machine Round")
+        }
+        .tint(Theme.accent)
     }
 }
 
-#Preview { RootView() }
+#Preview { RootView(dependencies: AppDependencies(api: APIClient(baseURL: Endpoints.jsonPlaceholder), store: InMemoryStore())) }
