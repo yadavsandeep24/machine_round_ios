@@ -1,75 +1,66 @@
-# Machine Round iOS: `feature/search-debounce`
+# Machine Round iOS
 
-> Diff against the previous step: `git diff feature/pagination-manual..feature/search-debounce`
+A starter project for **iOS machine coding rounds**: SwiftUI (iOS 17+), Swift 6 language mode with strict concurrency, `@Observable` view models, async/await with structured cancellation, a typed `APIClient`, offline-first caching, manual pagination, debounced search, and Swift Testing. It is the iOS counterpart of the Android, Flutter and React Native starters.
 
-## This step: server-side search with debounce and cancellation
-```
-.searchable(text: $model.query)        typing updates query instantly (no lag)
-.task(id: model.query) { search(query) }   a new keystroke CANCELS the previous task
-search(): blank → clear now; same query already loaded → skip (distinct)
-          try await Task.sleep(300ms)   ← debounce = cancellable sleep
-          results = try await repository.search(q)
-          try Task.checkCancellation()  ← drop a stale response
-```
-- **Why cancel, not just delay:** a delay alone still lets a slow response for "kot" land after "swift". Cancellation + `checkCancellation()` drops it (tested with a slow older query).
-- **`@Bindable var model = model`** inside `body` gives a binding to an `@Observable` model held in `@State`.
-- **Retry** calls `search(query, force: true)` (skips debounce and distinct). Results are not cached; old results stay visible under a spinner.
-- **Combine alternative:** `$query.debounce(for: 0.3, scheduler: RunLoop.main).removeDuplicates().map { … }.switchToLatest()`; name it, but structured concurrency is the 2026 default.
-- Tests: 4 search tests (one request for fast typing, stale response dropped, distinct, error/retry/clear). 23 total.
+The sample feature fetches posts from `jsonplaceholder.typicode.com`, caches them, and supports pagination, debounced server-side search, pull-to-refresh, favorites shared across screens, loading/error/empty states, and a detail screen with comments.
 
----
+**Layout:** all code is a Swift package (`swift test` runs everything on macOS in seconds); `App/MachineRound.xcodeproj` is a thin iOS app that shows `RootView`. `./scripts/check.sh` runs the tests and builds the app for the iOS Simulator.
 
-## Earlier step: `feature/pagination-manual`
+## Branches
 
-> Diff against the previous step: `git diff feature/post-detail..feature/pagination-manual`
+**Step ladder.** Each branch builds on the previous one, so `git diff <prev>..<next>` shows exactly one feature:
 
-## This step: hand-written load-more
-- **Trigger:** each row's `.task` calls `loadMoreIfNeeded(currentItem:)`; only rows within 5 of the end load the next page (tested). `.task` instead of `.onAppear` so it is cancelled when the row scrolls away.
-- **Guards:** one load at a time, never while refreshing, never past the end, never before page 1 succeeded, no auto-retry after an error (footer Retry passes `isRetry`).
-- **Refresh vs in-flight load-more:** a `generation` counter; a page that started before a refresh is dropped instead of being appended onto the new page 1 (tested with a gate).
-- **Dedupe by id**; **only page 1 is cached**; end = a short page (prefer `hasMore` / `nextCursor` if the API has one).
-- Tests: 4 pagination tests. 19 total.
+| Branch | What it adds |
+|---|---|
+| `00-empty` | SwiftUI app shell over a Swift package, Swift Testing, check script |
+| `01-minimal` | `AppError`, typed `APIClient` over an `HTTPClient` protocol, `Loadable` state enum, `KeyValueStore`, state views, composition root |
+| `02-posts-list` | Offline-first list: `@MainActor @Observable` view model, cache then network, `.refreshable`, `.task` cancellation |
+| `feature/post-detail` | Value-based navigation, `async let` parallel loads, cache-then-network, `.task(id:)` |
+| `feature/pagination-manual` | Near-end row trigger, guarded load-more, footer states, stale-page guard |
+| `feature/search-debounce` | `.searchable` + `.task(id:)` debounce (cancellable sleep), `checkCancellation`, distinct, retry |
+| `main` | Everything above + persisted favorites shared through the environment, docs |
 
----
+**Problem branches** (each from `01-minimal`), picked from **reported iOS rounds and fintech interview themes for your profile**. Sources: [docs/INTERVIEW_RESEARCH.md](docs/INTERVIEW_RESEARCH.md).
 
-## Earlier step: `feature/post-detail`
+| Branch | Source | Problem |
+|---|---|---|
+| `interview/async-image-cache` | Senior iOS loop "async image loader"; common live task | Actor pipeline: in-flight dedupe (reentrancy), per-waiter cancellation, LRU, ImageIO downsampling, `CachedImage` view |
+| `swiggy/weather-favourites-sync` | Swiggy iOS machine coding (1.5 h) | Sorted weather list, favourites synced across two screens via one observable store; `weak` vs `unowned` follow-up |
+| `practice/json-decoding` | Common live task | snake_case, flexible ISO dates, `Decimal` money, optional vs default, unknown enums, lossy arrays |
+| `fintech/payment-checkout-flow` | Fintech domain + your checkout/UPI background | Payment state machine, idempotency, backoff polling (timeout = unknown), `scenePhase` return, relaunch recovery |
+| `fintech/transaction-history` | Fintech domain | Day sections, filters, debounced search, cursor pagination with `task(id:)` cancellation |
+| `fintech/secure-session` | Fintech security themes | Keychain tokens, actor single-flight refresh, authorized HTTP client, auth-flow root |
+| `practice/bugs-and-optimisation` | "Fix this snippet" live task | Top 10 Swift/SwiftUI bugs and performance problems with in-app demos and tests |
 
-> Diff against the previous step: `git diff 02-posts-list..feature/post-detail`
-
-## This step: detail screen
-- **Value-based navigation:** `NavigationLink(value: post.id)` + `.navigationDestination(for: Int.self)`; the destination is built lazily and deep links only need the id.
-- **`async let`** loads the post and its comments in parallel; both are cancelled together when the view disappears (structured concurrency). A comments failure shows inline and does not fail the screen.
-- **`.task(id:)`** restarts the load (cancelling the old one) if the id changes.
-- **Cache first, network fallback** in `LivePostRepository.post(id:)` for posts that were never cached.
-- **Cancellation:** a cancelled load leaves the state untouched instead of showing an error (tested).
-- Tests: 5 more for the detail view model. 15 total.
-
----
-
-## Earlier step: `02-posts-list`
-
-A basic feature on top of `01-minimal`: fetch posts from `jsonplaceholder.typicode.com`, cache them (offline-first), and show loading, error with Retry, empty and success states with pull-to-refresh.
-
-```
-Sources/Posts/
-  Post.swift              Codable, Identifiable, Hashable, Sendable
-  PostRepository.swift    protocol + LivePostRepository (APIClient + KeyValueStore cache)
-  PostsViewModel.swift    @MainActor @Observable; state: Loadable<[Post]>, isRefreshing, bannerError
-  PostsView.swift         switch over state; List + .refreshable; .task for loading
+```bash
+git checkout 02-posts-list && git checkout -b my-attempt
+git diff 02-posts-list..feature/post-detail
 ```
 
-## Data flow
+## Architecture
 ```
-.task ─► load(): cache → state = .loaded(cache) (instant) ─► refresh() ─► repository ─► API ─► cache written
-.refreshable ─► refresh() (guarded: one at a time)
+SwiftUI View ──.task / actions──► @MainActor @Observable ViewModel ──► Repository (protocol) ──► APIClient ──► HTTPClient (URLSession | stub)
+     ▲ reads only what it uses            │ Loadable<T> state                  │ throws(AppError)       └► KeyValueStore (cache)
+     └────────────────────────────────────┘
+Composition root (AppDependencies) builds concrete types; features see protocols.
 ```
-- **Offline-first:** an error with cached data shows a banner over the list; with no cache, the full-screen error + Retry.
-- **`.task`, not `.onAppear { Task { } }`:** the task is cancelled automatically when the view disappears; the view model treats `.cancelled` as a non-error (tested).
-- **`@State` owns the `@Observable` model:** created once per view identity, survives re-renders.
-- **Duplicate refreshes dropped** (tested with a gated fake).
 
-## Tests (10)
-Core (5) + view model (5): network into empty cache, full-screen failure, cached data + banner, cancellation is not an error, refresh while refreshing dropped.
+## Concurrency rules used everywhere
+- View models are `@MainActor`; state changes are compiler-checked to happen on the main thread.
+- Loading runs in `.task {}` / `.task(id:)`, so it is **cancelled automatically** when the view goes away or the id changes; `AppError.cancelled` is never shown as an error.
+- Debounce = `Task.sleep` inside a cancellable task; stale results are dropped with `Task.checkCancellation()`.
+- Shared mutable caches are **actors**, and in-flight work is stored as a `Task` before awaiting (actor reentrancy).
 
-## Branch ladder
-`02-posts-list` → `feature/post-detail` → `feature/pagination-manual` → `feature/search-debounce` → `main`.
+## Things interviewers look for (already handled)
+- One state enum instead of contradictory booleans; loading, error + Retry, empty, success; cached data kept on failure
+- Client behind a protocol; typed errors; dependency injection without a container
+- `List`/`ForEach` with stable ids, value-based navigation, `@State` owning `@Observable` models, `@Bindable` for bindings
+- Tests with Swift Testing: stubs instead of network, controlled timing for cancellation and races
+
+## Run
+```bash
+swift test                  # all package tests (macOS)
+./scripts/check.sh          # tests + iOS Simulator build
+open App/MachineRound.xcodeproj
+```
+Running on a simulator needs an iOS runtime that matches your Xcode; on this machine the build is verified with `xcodebuild` for the generic iOS Simulator destination.
