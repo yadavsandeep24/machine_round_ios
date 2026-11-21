@@ -38,6 +38,7 @@ public struct PostDetailView: View {
             }
         }
         .navigationTitle("Post")
+        .toolbar { ToolbarItem(placement: .primaryAction) { FavoriteButton(id: model.postId) } }
         // `.task(id:)` restarts (and cancels the old load) if the id changes.
         .task(id: model.postId) { await model.load() }
     }

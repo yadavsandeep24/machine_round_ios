@@ -91,11 +91,15 @@ struct PostRow: View {
     let post: Post
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(post.title).font(.headline).lineLimit(1)
-            Text(post.body).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(post.title).font(.headline).lineLimit(1)
+                Text(post.body).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer()
+            FavoriteButton(id: post.id)
         }
         .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
     }
 }
