@@ -20,13 +20,29 @@ final class FakePostRepository: PostRepository, @unchecked Sendable {
 
     func cachedPosts() -> [Post] { lock.withLock { _cache } }
 
-    func refresh() async throws(AppError) -> [Post] {
+    var loadMoreFailWith: AppError?
+    private(set) var requestedPages: [Int] = []
+    var pageGates: [Int: @Sendable () async -> Void] = [:]
+
+    private func page(_ n: Int) -> Page {
+        let items = Array(remote.dropFirst((n - 1) * 20).prefix(20))
+        return Page(posts: items, endReached: items.count < 20)
+    }
+
+    func refresh() async throws(AppError) -> Page {
         lock.withLock { refreshCalls += 1 }
         await gate?()
         if let failWith { throw failWith }
-        let first = Array(remote.prefix(20))
-        lock.withLock { _cache = first }
+        let first = page(1)
+        lock.withLock { _cache = first.posts }
         return first
+    }
+
+    func loadPage(_ n: Int) async throws(AppError) -> Page {
+        lock.withLock { requestedPages.append(n) }
+        await pageGates[n]?()
+        if let loadMoreFailWith { throw loadMoreFailWith }
+        return page(n)
     }
 
     var remoteById: [Int: Post] = [:]

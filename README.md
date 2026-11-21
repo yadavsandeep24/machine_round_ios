@@ -1,4 +1,17 @@
-# Machine Round iOS: `feature/post-detail`
+# Machine Round iOS: `feature/pagination-manual`
+
+> Diff against the previous step: `git diff feature/post-detail..feature/pagination-manual`
+
+## This step: hand-written load-more
+- **Trigger:** each row's `.task` calls `loadMoreIfNeeded(currentItem:)`; only rows within 5 of the end load the next page (tested). `.task` instead of `.onAppear` so it is cancelled when the row scrolls away.
+- **Guards:** one load at a time, never while refreshing, never past the end, never before page 1 succeeded, no auto-retry after an error (footer Retry passes `isRetry`).
+- **Refresh vs in-flight load-more:** a `generation` counter; a page that started before a refresh is dropped instead of being appended onto the new page 1 (tested with a gate).
+- **Dedupe by id**; **only page 1 is cached**; end = a short page (prefer `hasMore` / `nextCursor` if the API has one).
+- Tests: 4 pagination tests. 19 total.
+
+---
+
+## Earlier step: `feature/post-detail`
 
 > Diff against the previous step: `git diff 02-posts-list..feature/post-detail`
 

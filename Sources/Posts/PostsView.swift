@@ -34,6 +34,15 @@ public struct PostsView: View {
                 ForEach(posts) { post in
                     // Value-based navigation: the destination is built lazily from the id.
                     NavigationLink(value: post.id) { PostRow(post: post) }
+                        .task { await model.loadMoreIfNeeded(currentItem: post) }
+                }
+                if !model.hasReachedEnd && !posts.isEmpty {
+                    LoadMoreFooter(
+                        isLoading: model.isLoadingMore,
+                        errorMessage: model.loadMoreError?.userMessage,
+                        retry: { Task { await model.loadMore(isRetry: true) } }
+                    )
+                    .listRowSeparator(.hidden)
                 }
             }
             .listStyle(.plain)
