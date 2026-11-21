@@ -1,30 +1,32 @@
-# Machine Round iOS: `01-minimal`
+# Fintech: payment checkout flow (Swift)
 
-Core infrastructure with no features. Start a round from here when you can bring a skeleton.
+Built from `01-minimal`. A **domain problem** for your profile (in-app checkout, UPI intent, payment SDKs): fintech loops probe payment-state integrity, idempotency and money precision. Same design as the React Native version, in Swift Concurrency.
 
+## The state machine (`PaymentMachine.swift`, pure `reduce`)
 ```
-Package.swift                      Core, AppFeature targets; Swift 6 language mode (strict concurrency)
-Sources/Core/
-  Networking/AppError.swift        one error enum + userMessage + map(URLError/Decoding/Cancellation) + fromStatus
-  Networking/APIClient.swift       HTTPClient protocol (URLSession conforms), typed get/send with typed throws
-  State/Loadable.swift             idle / loading(previous) / loaded / failed(error, previous)
-  Storage/KeyValueStore.swift      protocol + UserDefaultsStore + thread-safe InMemoryStore, JSON helpers
-  UI/StateViews.swift              LoadingView, ErrorView(retry), EmptyStateView, LoadMoreFooter
-Sources/AppFeature/
-  AppDependencies.swift            composition root (live() for the app, fakes for tests/previews)
-  RootView.swift                   NavigationStack shell
-App/MachineRound.xcodeproj         iOS app target that shows RootView
+idle ─pay─► initiating ─created(url)─► awaitingAuthorization ─returnedFromAuthorization─► processing
+               │       └─created─────────────────────────────────────────────────────►    │
+               └─createFailed─► failed ◄─status(failed)──────────────────────────────────────┤
+                                  └ reset ► idle                     timedOut ─► unknown ─────┤
+                                                                                 status(succeeded) ─► succeeded (final)
 ```
+Illegal events return the same state (double tap, anything after `succeeded`).
 
-## Why these choices (be ready to defend them)
-- **One state enum (`Loadable`)**, not `isLoading`/`error`/`items` booleans that can contradict each other. `previous` keeps data on screen while reloading.
-- **`HTTPClient` protocol:** `URLSession` conforms, tests pass a closure stub. No `URLProtocol` registration needed.
-- **Typed throws (`throws(AppError)`)** on the client: callers switch exhaustively; views never see `URLError`.
-- **Cancellation is not an error:** `AppError.cancelled` / `isCancellation` lets view models ignore it (user left or typed again).
-- **Swift 6 strict concurrency on:** `Sendable` everywhere it matters; ignoring concurrency warnings in a live round is a red flag in 2026.
-- **Composition root:** one place builds concrete types; features depend on protocols.
+## Rules it enforces (all tested)
+| Rule | Why |
+|---|---|
+| **Timeout = unknown, never failed** | "Failed" for a payment that went through makes users pay twice |
+| **Same idempotency key on retry of a lost create response** | Server returns the same payment: 2 calls, 1 payment |
+| **New key only after a definite failure** | A declined card is a new attempt |
+| **Double tap → one payment** | `pay()` moves the state out of `.idle` before its first `await` (MainActor, no lock needed) |
+| **Polling with backoff, network blips aren't failures** | 1, 2, 4, 8, 15, 30 s (sleep injected for tests) |
+| **UPI / 3DS return** | `openURL`, then `scenePhase == .active` → `appBecameActive()` resumes polling |
+| **App killed mid-payment** | Pending payment saved; `restoreIfNeeded()` re-checks it at launch |
+| **Money** | `Int64` minor units, `Decimal` for display, `₹588.82` (en_IN), currency-mismatch guard |
+| **PCI scope** | Cards go through the gateway SDK / hosted fields; the app never sees the PAN |
 
-## Tests (Swift Testing)
-Decoding + query building, status mapping (parameterised 401/404/500), bad JSON → `.decoding`, transport error mapping, corrupt storage treated as missing.
+## Say this too
+The server's webhook is the truth; polling is the client's view. Verify UPI status server-side, never trust the UPI app's return payload. No card data, VPA or tokens in logs or analytics.
 
-Next: `git checkout 02-posts-list`.
+## Tests (16)
+Machine (5) + view model (6): UPI open → return → success, double tap → one payment, lost response → same key, polling budget → unknown → Check status, decline → new key, relaunch recovery. Plus core (5).
