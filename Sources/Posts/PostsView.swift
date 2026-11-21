@@ -9,15 +9,48 @@ public struct PostsView: View {
     }
 
     public var body: some View {
+        @Bindable var model = model
         content
             .navigationTitle("Posts")
+            .searchable(text: $model.query, prompt: "Search posts")
             .task { await model.load() }
+            .task(id: model.query) { await model.search(model.query) }
             .navigationDestination(for: Int.self) { id in
                 PostDetailView(model: PostDetailViewModel(postId: id, repository: model.repository))
             }
     }
 
     @ViewBuilder private var content: some View {
+        if model.isSearching {
+            searchResults
+        } else {
+            browse
+        }
+    }
+
+    @ViewBuilder private var searchResults: some View {
+        switch model.searchState {
+        case .idle, .loading(previous: nil):
+            LoadingView()
+        case .failed(let error, _):
+            ErrorView(message: error.userMessage) {
+                Task { await model.search(model.query, force: true) }
+            }
+        case .loaded(let posts), .loading(previous: let posts?):
+            List(posts) { post in
+                NavigationLink(value: post.id) { PostRow(post: post) }
+            }
+            .listStyle(.plain)
+            .overlay {
+                if model.searchState.isLoading { ProgressView().frame(maxHeight: .infinity, alignment: .top) }
+                if posts.isEmpty, !model.searchState.isLoading {
+                    ContentUnavailableView.search(text: model.activeQuery)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var browse: some View {
         switch model.state {
         case .idle, .loading(previous: nil):
             LoadingView()

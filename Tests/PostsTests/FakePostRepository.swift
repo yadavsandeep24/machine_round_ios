@@ -61,4 +61,15 @@ final class FakePostRepository: PostRepository, @unchecked Sendable {
         if let commentsFailWith { throw commentsFailWith }
         return [Comment(id: postId * 10, name: "Commenter", email: "a@b.c", body: "Nice post")]
     }
+
+    private(set) var searchedQueries: [String] = []
+    var searchFailWith: AppError?
+    var searchDelays: [String: Duration] = [:]
+
+    func search(_ query: String) async throws(AppError) -> [Post] {
+        lock.withLock { searchedQueries.append(query) }
+        if let delay = searchDelays[query] { try? await Task.sleep(for: delay) }
+        if let searchFailWith { throw searchFailWith }
+        return remote.filter { $0.title.localizedCaseInsensitiveContains(query) }
+    }
 }

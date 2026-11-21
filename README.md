@@ -1,4 +1,25 @@
-# Machine Round iOS: `feature/pagination-manual`
+# Machine Round iOS: `feature/search-debounce`
+
+> Diff against the previous step: `git diff feature/pagination-manual..feature/search-debounce`
+
+## This step: server-side search with debounce and cancellation
+```
+.searchable(text: $model.query)        typing updates query instantly (no lag)
+.task(id: model.query) { search(query) }   a new keystroke CANCELS the previous task
+search(): blank → clear now; same query already loaded → skip (distinct)
+          try await Task.sleep(300ms)   ← debounce = cancellable sleep
+          results = try await repository.search(q)
+          try Task.checkCancellation()  ← drop a stale response
+```
+- **Why cancel, not just delay:** a delay alone still lets a slow response for "kot" land after "swift". Cancellation + `checkCancellation()` drops it (tested with a slow older query).
+- **`@Bindable var model = model`** inside `body` gives a binding to an `@Observable` model held in `@State`.
+- **Retry** calls `search(query, force: true)` (skips debounce and distinct). Results are not cached; old results stay visible under a spinner.
+- **Combine alternative:** `$query.debounce(for: 0.3, scheduler: RunLoop.main).removeDuplicates().map { … }.switchToLatest()`; name it, but structured concurrency is the 2026 default.
+- Tests: 4 search tests (one request for fast typing, stale response dropped, distinct, error/retry/clear). 23 total.
+
+---
+
+## Earlier step: `feature/pagination-manual`
 
 > Diff against the previous step: `git diff feature/post-detail..feature/pagination-manual`
 

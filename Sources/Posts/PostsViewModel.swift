@@ -22,10 +22,48 @@ public final class PostsViewModel {
     /// Start loading the next page this many rows before the end.
     static let prefetchDistance = 5
 
-    let repository: any PostRepository
+    /// Bound to `.searchable`. Typing updates this instantly (no lag); the
+    /// network work happens in `search(_:)`, driven by `.task(id: query)`.
+    public var query = ""
+    /// Trimmed query the results belong to. Empty = browse mode.
+    public private(set) var activeQuery = ""
+    public private(set) var searchState: Loadable<[Post]> = .idle
+    public var isSearching: Bool { !activeQuery.isEmpty }
 
-    public init(repository: any PostRepository) {
+    let repository: any PostRepository
+    private let debounce: Duration
+
+    public init(repository: any PostRepository, debounce: Duration = .milliseconds(300)) {
         self.repository = repository
+        self.debounce = debounce
+    }
+
+    /// Debounce = cancellable sleep. `.task(id: query)` cancels this call when
+    /// the next keystroke arrives, which cancels the sleep or the request:
+    /// that is switchMap / flatMapLatest in Swift Concurrency.
+    public func search(_ text: String, force: Bool = false) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { // clearing is instant
+            activeQuery = ""
+            searchState = .idle
+            return
+        }
+        // distinctUntilChanged: "swift" -> "swif" -> "swift" sends no request.
+        if !force, trimmed == activeQuery, case .loaded = searchState { return }
+        if !force {
+            do { try await Task.sleep(for: debounce) } catch { return } // superseded
+        }
+        activeQuery = trimmed
+        searchState = .loading(previous: searchState.value)
+        do {
+            let results = try await repository.search(trimmed)
+            try Task.checkCancellation() // a newer query started: drop this response
+            searchState = .loaded(results)
+        } catch is CancellationError {
+        } catch let error as AppError where error.isCancellation {
+        } catch let error as AppError {
+            searchState = .failed(error, previous: nil)
+        } catch {}
     }
 
     /// Called from `.task`: runs once per appearance and is cancelled on disappear.

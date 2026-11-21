@@ -21,6 +21,8 @@ public protocol PostRepository: Sendable {
     /// Cache first; network fallback for posts that were never cached (deep link, search).
     func post(id: Int) async throws(AppError) -> Post
     func comments(postId: Int) async throws(AppError) -> [Comment]
+    /// Server-side search. Not cached.
+    func search(_ query: String) async throws(AppError) -> [Post]
 }
 
 public struct LivePostRepository: PostRepository {
@@ -57,5 +59,9 @@ public struct LivePostRepository: PostRepository {
 
     public func comments(postId: Int) async throws(AppError) -> [Comment] {
         try await api.get("posts/\(postId)/comments")
+    }
+
+    public func search(_ query: String) async throws(AppError) -> [Post] {
+        try await api.get("posts", query: ["q": query, "_limit": "\(Self.pageSize)"])
     }
 }
