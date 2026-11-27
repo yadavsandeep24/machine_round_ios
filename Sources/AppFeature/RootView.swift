@@ -1,3 +1,4 @@
+import Checkout
 import Core
 import SwiftUI
 
@@ -10,8 +11,7 @@ public struct RootView: View {
 
     public var body: some View {
         NavigationStack {
-            EmptyStateView("Add your first feature in Sources/", systemImage: "hammer")
-                .navigationTitle("Machine Round")
+            CheckoutView()
         }
         .tint(Theme.accent)
     }
