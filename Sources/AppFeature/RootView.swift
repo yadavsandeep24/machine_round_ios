@@ -1,5 +1,6 @@
 import Core
 import SwiftUI
+import Uploads
 
 public struct RootView: View {
     let dependencies: AppDependencies
@@ -10,8 +11,7 @@ public struct RootView: View {
 
     public var body: some View {
         NavigationStack {
-            EmptyStateView("Add your first feature in Sources/", systemImage: "hammer")
-                .navigationTitle("Machine Round")
+            DocumentUploadView()
         }
         .tint(Theme.accent)
     }

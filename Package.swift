@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.4
 import PackageDescription
 
 /// All app code lives in this package so it builds and tests with `swift test`
@@ -12,7 +12,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "Core"),
-        .target(name: "AppFeature", dependencies: ["Core"]),
+        .target(name: "Uploads", dependencies: ["Core"]),
+        .target(name: "AppFeature", dependencies: ["Core", "Uploads"]),
         .testTarget(name: "CoreTests", dependencies: ["Core"]),
+        .testTarget(name: "UploadsTests", dependencies: ["Uploads", "Core"]),
     ]
 )
